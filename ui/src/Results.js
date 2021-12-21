@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import Table from 'react-bootstrap/Table';
-import Alert from 'react-bootstrap/Alert';
+/**
+ * Check out the results from some upload.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
+import Table from "react-bootstrap/Table";
+import Alert from "react-bootstrap/Alert";
+import Card from "react-bootstrap/Card";
+import Stack from "react-bootstrap/Stack";
 
 const Results = () => {
   const params = useParams();
@@ -11,32 +17,44 @@ const Results = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let websock = new WebSocket(`ws://localhost:8080/results/${params.id}`);
+    let websock = new WebSocket(`ws://localhost:8081/results/${params.id}`);
     websock.onopen = () => {
-      console.info("Established connection to backend.")
+      console.info("Established connection to backend.");
       websock.send(params.id);
     };
-    websock.onerror = () => {
+    websock.onerror = (e) => {
+      console.error(e);
       setError("Lost connection to the backend!");
     };
     websock.onmessage = (msg) => {
-      setResults(msg.data);
+      setResults(JSON.parse(msg.data));
     };
     sock.current = websock;
     return () => websock.close();
   }, [params.id]);
 
   return (
-    <>
-      {error ?
+    <Stack direction="vertical" gap={3}>
+      {error ? (
         <section>
-          {error}
+          <Alert variant="danger">{error}</Alert>
         </section>
-        : ((showMsg || results.length === 0) &&
-          <Alert variant='primary' dismissible onClick={() => setShowMsg(false)}>
-            Your results weren't cached, so we're generating them at our earliest convenience.
+      ) : (
+        (showMsg || results.length === 0) && (
+          <Alert
+            variant="primary"
+            dismissible
+            onClick={() => setShowMsg(false)}
+          >
+            Your results weren't cached, so we're generating them at our
+            earliest convenience.
           </Alert>
-        )}
+        )
+      )}
+      <Card body>
+        <Card.Title>Results for run {params.id}</Card.Title>
+        <Card.Subtitle className="text-muted">TODO: timestamp</Card.Subtitle>
+      </Card>
       <Table striped bordered hover responsive>
         <thead>
           <tr>
@@ -47,16 +65,19 @@ const Results = () => {
           </tr>
         </thead>
         <tbody>
-          {Array.from(results).map((value, idx) => (
-            <tr key={idx}>
-              <td>{idx + 1}</td>
-              <td>{String(value)}</td>
-            </tr>
-          ))}
+          {results &&
+            Array.from(results).map((value, idx) => (
+              <tr key={idx}>
+                <td>{idx + 1}</td>
+                <td>{value.fail ? "🟢" : "🔴"}</td>
+                <td>TODO: name</td>
+                <td>TODO: error message</td>
+              </tr>
+            ))}
         </tbody>
       </Table>
-    </>
+    </Stack>
   );
-}
+};
 
 export default Results;

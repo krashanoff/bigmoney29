@@ -1,5 +1,5 @@
 //
-// athome
+// bigmoney29
 //
 // Leonid Krashanoff
 //
@@ -17,9 +17,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -28,13 +28,150 @@ import (
 	"golang.org/x/net/websocket"
 )
 
-// Maximum number of parallel job tasks.
-const MAXJOBS = 5
+var config Config
 
-// Jobs queued for execution.
-var jobQueue chan Job
+type Config struct {
+	GradingScript      string `toml:"grading_script"`
+	Address            string `toml:"address"`
+	ResultsRefreshRate uint   `toml:"results_refresh_rate"`
+	MaxJobs            uint   `toml:"max_jobs"`
+}
 
-var db *bolt.DB
+func main() {
+	_, err := toml.DecodeFile("./config.toml", &config)
+	if err != nil {
+		panic(err)
+	}
+
+	e := echo.New()
+	e.HideBanner = true
+	e.Logger.SetLevel(log.DEBUG)
+	e.Use(middleware.Logger())
+	e.Use(middleware.Gzip())
+	e.Use(middleware.BodyLimit("10K"))
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+	}))
+
+	// Apply our context.
+	jobQueue := make(chan Job, config.MaxJobs)
+	results := make(chan Result, config.MaxJobs)
+	db, err := bolt.Open("athome.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+	if err := initDb(db); err != nil {
+		e.Logger.Error(err)
+		return
+	}
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			return next(&Ctx{
+				c,
+				db,
+				jobQueue,
+			})
+		}
+	})
+
+	e.GET("*", func(c echo.Context) error {
+		return c.File("ui/build/index.html")
+	})
+	e.POST("/upload", handleUpload)
+	e.GET("/results/:id", serveResults)
+
+	// Spawn our task runner
+	go func() {
+		for job := range jobQueue {
+			go gradingScript(db, job, results)
+		}
+	}()
+
+	// Serve
+	e.Logger.Fatal(e.Start(config.Address))
+}
+
+func handleUpload(cc echo.Context) error {
+	c := cc.(*Ctx)
+
+	// name := c.FormValue("name")
+	assn := c.FormValue("assignment")
+	if assn == "" {
+		return c.String(http.StatusBadRequest, "Invalid assignment number")
+	}
+	file, err := c.FormFile("file")
+	if err != nil || file == nil || file.Size == 0 {
+		return c.String(http.StatusBadRequest, "Failed parsing file field")
+	}
+
+	fileData, err := file.Open()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Failed to read .tar.gz")
+	}
+
+	// Generate the job.
+	requestId := uuid.NewString()
+	c.jobQueue <- Job{
+		id:         requestId,
+		file:       fileData,
+		assignment: assn,
+	}
+	return c.String(http.StatusCreated, requestId)
+}
+
+func gradingScript(db *bolt.DB, job Job, results chan<- Result) error {
+	fmt.Println("Starting grading script")
+	zr, err := gzip.NewReader(job.file)
+	if err != nil {
+		db.Update(func(t *bolt.Tx) error {
+			data, err := json.Marshal([]Result{{Fail: true}})
+			if err != nil {
+				return err
+			}
+			t.Bucket([]byte("runs")).Put([]byte(job.id), data)
+			return nil
+		})
+		return err
+	}
+	defer zr.Close()
+	tr := tar.NewReader(zr)
+
+	// Prepare our temporary directory for running files.
+	dir := os.TempDir()
+	os.Mkdir(dir, 0640)
+	for header, err := tr.Next(); err == nil; header, err = tr.Next() {
+		fmt.Printf("Checking file %s\n", header.Name)
+		tmpFile, err := os.CreateTemp(dir, header.Name)
+		if err != nil {
+			fmt.Println("failed, breaking", err)
+			break
+		}
+		io.Copy(tmpFile, tr)
+	}
+	fmt.Println("dir is", dir)
+
+	// Once a temporary directory is established, we register it to our DB.
+	// db.Update(func(tx *bolt.Tx) error {
+	// 	return nil
+	// })
+
+	fmt.Println("path is", config.GradingScript)
+	cmd := exec.Command(config.GradingScript, dir)
+	output, err := cmd.Output()
+	if err != nil {
+		return err
+	}
+	fmt.Print(string(output))
+	return nil
+}
+
+type Ctx struct {
+	echo.Context
+	db       *bolt.DB
+	jobQueue chan<- Job
+}
 
 type Job struct {
 	id         string
@@ -43,131 +180,39 @@ type Job struct {
 }
 
 type Result struct {
-	Fail bool `json:"fail"`
+	TestName string `json:"testName"`
+	Score    uint64 `json:"score"`
+	Fail     bool   `json:"fail"`
+	Msg      string `json:"msg"`
 }
 
-func main() {
-	e := echo.New()
-	e.Logger.SetLevel(log.DEBUG)
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
-	}))
-	e.GET("*", func(c echo.Context) error {
-		return c.File("ui/build/index.html")
-	})
-	e.POST("/upload", func(c echo.Context) error {
-		name := c.FormValue("name")
-		assn := c.FormValue("assignment")
-		if name == "" || assn == "" {
-			return c.String(http.StatusBadRequest, "Invalid assignment number")
-		}
-		file, err := c.FormFile("file")
-		if err != nil || file == nil || file.Size == 0 {
-			return c.String(http.StatusBadRequest, "Failed parsing file field")
-		}
+func serveResults(cc echo.Context) error {
+	c := cc.(*Ctx)
 
-		fileData, err := file.Open()
-		if err != nil {
-			return c.String(http.StatusInternalServerError, "Failed to read .tar.gz")
-		}
-
-		// Generate the job.
-		requestId := uuid.NewString()
-		jobQueue <- Job{
-			id:         requestId,
-			file:       fileData,
-			assignment: assn,
-		}
-		return c.String(http.StatusCreated, requestId)
-	})
-	e.GET("/results/:id", getResults)
-
-	handle, err := bolt.Open("tests.db", 0600, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer handle.Close()
-	if err := initDb(handle); err != nil {
-		e.Logger.Error(err)
-		return
-	}
-	db = handle
-
-	// Spawn task runner
-	jobQueue = make(chan Job, MAXJOBS)
-	go func() {
-		for job := range jobQueue {
-			// TODO: limit number of jobs that can run in parallel
-			go func(job Job) {
-				zr, err := gzip.NewReader(job.file)
-				if err != nil {
-					e.Logger.Error(err)
-					db.Update(func(t *bolt.Tx) error {
-						data, err := json.Marshal(Result{Fail: true})
-						if err != nil {
-							return err
-						}
-						t.Bucket([]byte("runs")).Put([]byte(job.id), data)
-						return nil
-					})
-					return
-				}
-				defer zr.Close()
-				tr := tar.NewReader(zr)
-
-				// Prepare our temporary directory for running files.
-				dir := os.TempDir()
-				e.Logger.Debugf("Temp dir is: %v", dir)
-				for header, err := tr.Next(); err == nil; header, err = tr.Next() {
-					tmpFile, err := os.CreateTemp(dir, header.Name)
-					if err != nil {
-						break
-					}
-					io.Copy(tmpFile, tr)
-				}
-
-				// Once a temporary directory is established, we add it to our DB.
-				db.Update(func(tx *bolt.Tx) error {
-					return nil
-				})
-
-				cmd := exec.Command("cargo", "test", "--manifest-path", path.Join(dir, "Cargo.toml"))
-				stdout, _ := cmd.StdoutPipe()
-				if err := cmd.Run(); err != nil {
-					e.Logger.Errorf("%v\n", err)
-				}
-				fmt.Println(job, stdout)
-			}(job)
-		}
-	}()
-
-	// Serve
-	e.Logger.Fatal(e.Start(":8080"))
-}
-
-func getResults(c echo.Context) error {
 	id := c.Param("id")
-	c.Logger().Debug("Starting websocket")
 	websocket.Handler(func(ws *websocket.Conn) {
 		defer ws.Close()
 
 		// Listen in on our tests, displaying output as it arrives.
-		tick := time.NewTicker(500 * time.Millisecond)
+		tick := time.NewTicker(time.Duration(config.ResultsRefreshRate) * time.Millisecond)
 		for range tick.C {
-			db.View(func(t *bolt.Tx) error {
-				c.Logger().Debug("starting")
+			err := c.db.View(func(t *bolt.Tx) error {
 				b := t.Bucket([]byte("runs"))
 				data := b.Get([]byte(id))
 
-				c.Logger().Debugf("Checked and got %s", string(data))
+				var results []Result
+				json.Unmarshal(data, &results)
 
-				err := websocket.Message.Send(ws, data)
+				err := websocket.JSON.Send(ws, results)
 				if err != nil {
-					c.Logger().Error(err)
+					return err
 				}
 				return nil
 			})
+			if err != nil {
+				c.Logger().Error(err)
+				break
+			}
 		}
 		tick.Stop()
 	}).ServeHTTP(c.Response(), c.Request())

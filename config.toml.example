@@ -1,0 +1,11 @@
+# Set the address for your server.
+address = ":8081"
+
+# Path to the grading script to run on each upload.
+grading_script = "./grade.sh"
+
+# Define the maximum number of jobs that may run in parallel.
+max_jobs = 5
+
+# Refresh rate for the results page, in milliseconds.
+results_refresh_rate = 3000
