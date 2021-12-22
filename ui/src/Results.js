@@ -17,7 +17,7 @@ const Results = () => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let websock = new WebSocket(`ws://localhost:8081/results/${params.id}`);
+    let websock = new WebSocket(`ws://localhost:8081/ws/${params.id}`);
     websock.onopen = () => {
       console.info("Established connection to backend.");
       websock.send(params.id);

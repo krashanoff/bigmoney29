@@ -12,7 +12,7 @@ import Stack from "react-bootstrap/Stack";
 import "./Submit.css";
 import { useState } from "react";
 
-export default function Submit() {
+const Submit = () => {
   const navigate = useNavigate();
   const [errors, setErrors] = useState({
     uploadError: "",
@@ -30,7 +30,7 @@ export default function Submit() {
         if (r.status >= 200 && r.status < 300) return r.text();
         throw r.status;
       })
-      .then((resp) => navigate(`/${resp}`))
+      .then((resp) => console.info(`/${resp}`))
       .catch((e) =>
         setErrors((oldErr) => {
           oldErr.validationError = `Failed uploading! Server responded with: ${String(
@@ -83,4 +83,6 @@ export default function Submit() {
       </Form>
     </Stack>
   );
-}
+};
+
+export default Submit;

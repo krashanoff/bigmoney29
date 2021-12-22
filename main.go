@@ -9,17 +9,13 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"os/exec"
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/golang-jwt/jwt"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -30,11 +26,8 @@ import (
 
 var config Config
 
-type Config struct {
-	GradingScript      string `toml:"grading_script"`
-	Address            string `toml:"address"`
-	ResultsRefreshRate uint   `toml:"results_refresh_rate"`
-	MaxJobs            uint   `toml:"max_jobs"`
+func init() {
+	config = config.Default()
 }
 
 func main() {
@@ -47,24 +40,24 @@ func main() {
 	e.HideBanner = true
 	e.Logger.SetLevel(log.DEBUG)
 	e.Use(middleware.Logger())
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(5)))
 	e.Use(middleware.Gzip())
-	e.Use(middleware.BodyLimit("10K"))
+	e.Use(middleware.BodyLimit(config.BodyLimit))
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+		AllowOrigins: []string{"http://localhost:*"},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
 	}))
 
 	// Apply our context.
 	jobQueue := make(chan Job, config.MaxJobs)
 	results := make(chan Result, config.MaxJobs)
-	db, err := bolt.Open("athome.db", 0600, nil)
+	db, err := bolt.Open(config.DBPath, 0600, nil)
 	if err != nil {
-		log.Fatal(err)
+		e.Logger.Fatal(err)
 	}
 	defer db.Close()
 	if err := initDb(db); err != nil {
-		e.Logger.Error(err)
-		return
+		e.Logger.Fatal(err)
 	}
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -80,12 +73,84 @@ func main() {
 		return c.File("ui/build/index.html")
 	})
 	e.POST("/upload", handleUpload)
-	e.GET("/results/:id", serveResults)
+	e.GET("/ws/:id", serveResults)
+
+	// Login page allowing use of the bigmoney API.
+	e.POST("/cash/login", func(c echo.Context) error {
+		username := c.FormValue("username")
+		password := c.FormValue("password")
+		if username != "leo" || password != "hi" {
+			return c.NoContent(http.StatusUnauthorized)
+		}
+
+		// TODO: get user information from database
+		claim := &UserClaim{
+			"Leo Krashanoff",
+			true,
+			jwt.StandardClaims{
+				ExpiresAt: time.Now().Add(time.Minute * 30).Unix(),
+			},
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
+		t, err := token.SignedString([]byte(config.SigningKey))
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(http.StatusOK, echo.Map{
+			"token": t,
+		})
+	})
+
+	public := e.Group("/cash")
+	public.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+		Claims:     &UserClaim{},
+		SigningKey: []byte(config.SigningKey),
+	}))
+	public.GET("/assignments", func(c echo.Context) error {
+		return c.String(http.StatusOK, "assignment")
+	})
+
+	admin := e.Group("/cash")
+	// admin.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+	// 	Claims:     &UserClaim{},
+	// 	SigningKey: []byte(config.SigningKey),
+	// }))
+	// admin.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+	// 	return func(c echo.Context) error {
+	// 		user := c.Get("user").(*jwt.Token)
+	// 		claims := user.Claims.(*UserClaim)
+	// 		if !claims.Admin {
+	// 			return c.NoContent(http.StatusUnauthorized)
+	// 		}
+	// 		return next(c)
+	// 	}
+	// })
+	admin.GET("/assignment/:assignmentID", func(c echo.Context) error {
+		return c.String(http.StatusOK, "Welcome")
+	})
+	admin.POST("/user", func(c echo.Context) error {
+		// TODO: create user(s)
+		var body []struct {
+			Admin    bool   `json:"admin"`
+			Name     string `json:"name"`
+			UID      string `json:"UID"`
+			Password string `json:"password"`
+		}
+		c.Bind(&body)
+		return nil
+	})
+	admin.DELETE("/user", func(c echo.Context) error {
+		// TODO: delete user(s)
+		return nil
+	})
 
 	// Spawn our task runner
 	go func() {
+		occupied := make(chan bool, config.MaxJobs)
 		for job := range jobQueue {
-			go gradingScript(db, job, results)
+			occupied <- true
+			go gradingScript(db, job, results, occupied)
 		}
 	}()
 
@@ -93,6 +158,35 @@ func main() {
 	e.Logger.Fatal(e.Start(config.Address))
 }
 
+// See config.toml.example for definitions of this struct's fields.
+type Config struct {
+	GradingScript      string `toml:"grading_script"`
+	Address            string `toml:"address"`
+	BodyLimit          string `toml:"body_limit"`
+	DBPath             string `toml:"db_path"`
+	ResultsRefreshRate uint   `toml:"results_refresh_rate"`
+	MaxJobs            uint   `toml:"max_jobs"`
+	SigningKey         string `toml:"signing_key"`
+}
+
+func (Config) Default() Config {
+	return Config{
+		Address:            ":8080",
+		BodyLimit:          "10K",
+		DBPath:             "bigmoney.db",
+		ResultsRefreshRate: 3000,
+		MaxJobs:            5,
+	}
+}
+
+type UserClaim struct {
+	Name  string `json:"name"`
+	Admin bool   `json:"admin"`
+	jwt.StandardClaims
+}
+
+// Handle an upload to the server. Validate the upload, generate a new Job,
+// and proceed.
 func handleUpload(cc echo.Context) error {
 	c := cc.(*Ctx)
 
@@ -121,52 +215,6 @@ func handleUpload(cc echo.Context) error {
 	return c.String(http.StatusCreated, requestId)
 }
 
-func gradingScript(db *bolt.DB, job Job, results chan<- Result) error {
-	fmt.Println("Starting grading script")
-	zr, err := gzip.NewReader(job.file)
-	if err != nil {
-		db.Update(func(t *bolt.Tx) error {
-			data, err := json.Marshal([]Result{{Fail: true}})
-			if err != nil {
-				return err
-			}
-			t.Bucket([]byte("runs")).Put([]byte(job.id), data)
-			return nil
-		})
-		return err
-	}
-	defer zr.Close()
-	tr := tar.NewReader(zr)
-
-	// Prepare our temporary directory for running files.
-	dir := os.TempDir()
-	os.Mkdir(dir, 0640)
-	for header, err := tr.Next(); err == nil; header, err = tr.Next() {
-		fmt.Printf("Checking file %s\n", header.Name)
-		tmpFile, err := os.CreateTemp(dir, header.Name)
-		if err != nil {
-			fmt.Println("failed, breaking", err)
-			break
-		}
-		io.Copy(tmpFile, tr)
-	}
-	fmt.Println("dir is", dir)
-
-	// Once a temporary directory is established, we register it to our DB.
-	// db.Update(func(tx *bolt.Tx) error {
-	// 	return nil
-	// })
-
-	fmt.Println("path is", config.GradingScript)
-	cmd := exec.Command(config.GradingScript, dir)
-	output, err := cmd.Output()
-	if err != nil {
-		return err
-	}
-	fmt.Print(string(output))
-	return nil
-}
-
 type Ctx struct {
 	echo.Context
 	db       *bolt.DB
@@ -186,6 +234,8 @@ type Result struct {
 	Msg      string `json:"msg"`
 }
 
+// Push results to a client at regular intervals. If the results are already
+// available, then just send them the results and terminate.
 func serveResults(cc echo.Context) error {
 	c := cc.(*Ctx)
 
@@ -216,15 +266,5 @@ func serveResults(cc echo.Context) error {
 		}
 		tick.Stop()
 	}).ServeHTTP(c.Response(), c.Request())
-	return nil
-}
-
-func initDb(db *bolt.DB) error {
-	if err := db.Update(func(t *bolt.Tx) error {
-		_, err := t.CreateBucket([]byte("runs"))
-		return err
-	}); err != nil && err != bolt.ErrBucketExists {
-		return err
-	}
 	return nil
 }

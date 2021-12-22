@@ -1,3 +1,6 @@
+# Path to use for the DB.
+db_path = "./example.db"
+
 # Set the address for your server.
 address = ":8081"
 
@@ -9,3 +12,6 @@ max_jobs = 5
 
 # Refresh rate for the results page, in milliseconds.
 results_refresh_rate = 3000
+
+# Limit for request body size.
+body_limit = "10K"
