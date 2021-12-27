@@ -13,12 +13,13 @@ reasonably small and easy to maintain.
 
 * User association
 * Use ICO instead of PNG for favicon
+* Alternative submission formats
 * Grade distributions + data analysis views
 
 ## Configuration/Setup
 
 Configure the server through `config.toml`. The [example file](config.toml.example)
-is heavily commented.
+is heavily commented. All options should be set.
 
 ## Admin Accounts
 

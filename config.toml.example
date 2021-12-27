@@ -15,3 +15,6 @@ results_refresh_rate = 3000
 
 # Limit for request body size.
 body_limit = "10K"
+
+# Rate limit for clients, in requests per second.
+rate_limit = 5

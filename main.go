@@ -22,12 +22,32 @@ import (
 	"github.com/labstack/gommon/log"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/net/websocket"
+	"golang.org/x/time/rate"
 )
 
 var config Config
 
+// See config.toml.example for definitions of this struct's fields.
+type Config struct {
+	GradingScript      string `toml:"grading_script"`
+	Address            string `toml:"address"`
+	BodyLimit          string `toml:"body_limit"`
+	DBPath             string `toml:"db_path"`
+	ResultsRefreshRate uint   `toml:"results_refresh_rate"`
+	MaxJobs            uint   `toml:"max_jobs"`
+	RateLimit          uint   `toml:"rate_limit"`
+	SigningKey         string `toml:"signing_key"`
+}
+
 func init() {
-	config = config.Default()
+	config = Config{
+		Address:            ":8080",
+		BodyLimit:          "10K",
+		DBPath:             "bigmoney.db",
+		ResultsRefreshRate: 3000,
+		MaxJobs:            5,
+		RateLimit:          5,
+	}
 }
 
 func main() {
@@ -40,7 +60,7 @@ func main() {
 	e.HideBanner = true
 	e.Logger.SetLevel(log.DEBUG)
 	e.Use(middleware.Logger())
-	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(5)))
+	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(rate.Limit(config.RateLimit))))
 	e.Use(middleware.Gzip())
 	e.Use(middleware.BodyLimit(config.BodyLimit))
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
@@ -48,7 +68,7 @@ func main() {
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
 	}))
 
-	// Apply our context.
+	// Apply our custom context to each request.
 	jobQueue := make(chan Job, config.MaxJobs)
 	results := make(chan Result, config.MaxJobs)
 	db, err := bolt.Open(config.DBPath, 0600, nil)
@@ -69,23 +89,25 @@ func main() {
 		}
 	})
 
+	// Serve our JavaScript files for any GET request.
 	e.GET("*", func(c echo.Context) error {
 		return c.File("ui/build/index.html")
 	})
+
 	e.POST("/upload", handleUpload)
 	e.GET("/ws/:id", serveResults)
-
-	// Login page allowing use of the bigmoney API.
 	e.POST("/cash/login", func(c echo.Context) error {
+		// Login page allowing use of the bigmoney API.
 		username := c.FormValue("username")
 		password := c.FormValue("password")
-		if username != "leo" || password != "hi" {
+
+		// Validate the username and password against our database.
+		if !validateLogin(db, username, password) {
 			return c.NoContent(http.StatusUnauthorized)
 		}
 
 		// TODO: get user information from database
 		claim := &UserClaim{
-			"Leo Krashanoff",
 			true,
 			jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(time.Minute * 30).Unix(),
@@ -102,34 +124,28 @@ func main() {
 		})
 	})
 
-	public := e.Group("/cash")
-	public.Use(middleware.JWTWithConfig(middleware.JWTConfig{
+	api := e.Group("/cash")
+	api.Use(middleware.JWTWithConfig(middleware.JWTConfig{
 		Claims:     &UserClaim{},
 		SigningKey: []byte(config.SigningKey),
 	}))
-	public.GET("/assignments", func(c echo.Context) error {
-		return c.String(http.StatusOK, "assignment")
+	api.GET("/assignments", func(c echo.Context) error {
+		// TODO: get assignments for class
+		return c.String(http.StatusOK, "{\"assignment\": \"\"}")
 	})
-
-	admin := e.Group("/cash")
-	// admin.Use(middleware.JWTWithConfig(middleware.JWTConfig{
-	// 	Claims:     &UserClaim{},
-	// 	SigningKey: []byte(config.SigningKey),
-	// }))
-	// admin.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-	// 	return func(c echo.Context) error {
-	// 		user := c.Get("user").(*jwt.Token)
-	// 		claims := user.Claims.(*UserClaim)
-	// 		if !claims.Admin {
-	// 			return c.NoContent(http.StatusUnauthorized)
-	// 		}
-	// 		return next(c)
-	// 	}
-	// })
-	admin.GET("/assignment/:assignmentID", func(c echo.Context) error {
+	api.GET("/assignments/:assignmentID", func(c echo.Context) error {
+		// TODO: get score for assignment
 		return c.String(http.StatusOK, "Welcome")
 	})
-	admin.POST("/user", func(c echo.Context) error {
+	api.PUT("/user", func(c echo.Context) error {
+		return c.String(http.StatusOK, "Test")
+	})
+	api.POST("/user", func(c echo.Context) error {
+		claims := c.Get("user").(*jwt.Token).Claims.(*UserClaim)
+		if !claims.Admin {
+			return c.NoContent(http.StatusUnauthorized)
+		}
+
 		// TODO: create user(s)
 		var body []struct {
 			Admin    bool   `json:"admin"`
@@ -140,9 +156,19 @@ func main() {
 		c.Bind(&body)
 		return nil
 	})
-	admin.DELETE("/user", func(c echo.Context) error {
-		// TODO: delete user(s)
-		return nil
+	api.DELETE("/user", func(c echo.Context) error {
+		claims := c.Get("user").(*jwt.Token).Claims.(*UserClaim)
+		if !claims.Admin {
+			return c.NoContent(http.StatusUnauthorized)
+		}
+
+		var body []struct {
+			Name string `json:"name"`
+			UID  string `json:"UID"`
+		}
+		c.Bind(&body)
+
+		return c.NoContent(http.StatusOK)
 	})
 
 	// Spawn our task runner
@@ -158,30 +184,8 @@ func main() {
 	e.Logger.Fatal(e.Start(config.Address))
 }
 
-// See config.toml.example for definitions of this struct's fields.
-type Config struct {
-	GradingScript      string `toml:"grading_script"`
-	Address            string `toml:"address"`
-	BodyLimit          string `toml:"body_limit"`
-	DBPath             string `toml:"db_path"`
-	ResultsRefreshRate uint   `toml:"results_refresh_rate"`
-	MaxJobs            uint   `toml:"max_jobs"`
-	SigningKey         string `toml:"signing_key"`
-}
-
-func (Config) Default() Config {
-	return Config{
-		Address:            ":8080",
-		BodyLimit:          "10K",
-		DBPath:             "bigmoney.db",
-		ResultsRefreshRate: 3000,
-		MaxJobs:            5,
-	}
-}
-
 type UserClaim struct {
-	Name  string `json:"name"`
-	Admin bool   `json:"admin"`
+	Admin bool `json:"admin"`
 	jwt.StandardClaims
 }
 
