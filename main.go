@@ -27,6 +27,7 @@ var config Config
 type Config struct {
 	Password           string `toml:"password"`
 	GradingScript      string `toml:"grading_script"`
+	AdminAddress       string `toml:"admin_address"`
 	Address            string `toml:"address"`
 	BodyLimit          string `toml:"body_limit"`
 	DBPath             string `toml:"db_path"`

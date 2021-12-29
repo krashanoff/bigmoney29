@@ -2,13 +2,14 @@
  * Data-rich summary of your scores and stuff.
  */
 
+import { useNavigate } from "react-router-dom";
+import { useCookies } from "react-cookie";
+
 import Card from "react-bootstrap/Card";
 import Container from "react-bootstrap/esm/Container";
 import Stack from "react-bootstrap/Stack";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
-import { useNavigate } from "react-router-dom";
-import { useCookies } from "react-cookie";
 
 const Summary = () => {
   const navigate = useNavigate();

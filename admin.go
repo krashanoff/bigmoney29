@@ -14,10 +14,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var matchCommand = regexp.MustCompile(`([\+\-](student|assignment|score)) (.*) (".*"|'.*') (.*)`)
+var matchCommand = regexp.MustCompile(`([\+\-]student (.*) (".*"|'.*') (.*))|([\+\-](student|assignment|score)) (.*) (".*"|'.*') (.*)`)
 
 func startAdmin(e *echo.Echo, db *sql.DB) (*ssh.Server, error) {
-	s, err := wish.NewServer(wish.WithAddress("localhost:8082"), wish.WithPasswordAuth(checkAdmin), wish.WithMiddleware(
+	s, err := wish.NewServer(wish.WithAddress(config.AdminAddress), wish.WithPasswordAuth(checkAdmin), wish.WithMiddleware(
 		bm.Middleware(processCommandsMiddleware(db)),
 	))
 	if err != nil {
@@ -46,18 +46,26 @@ func processCommandsMiddleware(db *sql.DB) func(s ssh.Session) (tea.Model, []tea
 
 			switch strings.ToLower(submatch[1]) {
 			case "+student":
-				// TODO: add user to class
 				if err := addUser(s.Context(), db, false, "22", "leo", "pw"); err != nil {
 					failed++
-					fmt.Println("Failed", err)
 					continue
 				}
-				fmt.Println("Processed")
 			case "-student":
+				if err := removeUser(s.Context(), db, "22"); err != nil {
+					failed++
+					continue
+				}
 			case "+assignment":
+				if err := addAssignment(s.Context(), db, "name", 0.0); err != nil {
+					failed++
+					continue
+				}
 			case "-assignment":
+				if err := removeAssignment(s.Context(), db, "name"); err != nil {
+					failed++
+					continue
+				}
 			case "+score":
-			case "-score":
 			}
 			successful++
 		}

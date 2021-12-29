@@ -114,6 +114,25 @@ func addUser(ctx context.Context, db *sql.DB, admin bool, uid, name, password st
 	return nil
 }
 
+// Delete a user from the database.
+func removeUser(ctx context.Context, db *sql.DB, uid string) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{
+		ReadOnly: false,
+	})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.Exec("UPDATE User SET deleted = CURRENT_TIMESTAMP WHERE username = '?'", uid); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
 type Assignment struct {
 	Name   string  `json:"name"`
 	Points float64 `json:"points"`
@@ -144,4 +163,38 @@ func getAssignments(c *Ctx) ([]Assignment, error) {
 	}
 
 	return assignments, nil
+}
+
+func addAssignment(ctx context.Context, db *sql.DB, name string, totalPoints float64) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{
+		ReadOnly: true,
+	})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("INSERT INTO Assignment (name, points) VALUES (?, ?)", name, totalPoints); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func removeAssignment(ctx context.Context, db *sql.DB, name string) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{
+		ReadOnly: true,
+	})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM Assignment WHERE name = '?'", name); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
 }

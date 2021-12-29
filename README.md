@@ -68,8 +68,6 @@ want to in these... and so can students. Exercise caution.
 
 In exchange, your grading script must provide the following functionality:
 * A grading script **must** have chmod `0700` for the `bigmoney` user.
-* A grading script must handle the following option `--summary`.
-  * Output each grading scheme.
 * A grading script must, for each test case:
   * Print the name of the test case.
   * Print supplementary help messages to stderr.

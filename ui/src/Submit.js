@@ -4,13 +4,12 @@
  */
 
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
 import Stack from "react-bootstrap/Stack";
-
-import "./Submit.css";
-import { useState } from "react";
 
 const Submit = () => {
   const navigate = useNavigate();
@@ -30,7 +29,7 @@ const Submit = () => {
         if (r.status >= 200 && r.status < 300) return r.text();
         throw r.status;
       })
-      .then((resp) => console.info(`/${resp}`))
+      .then((resp) => navigate(`/results/${resp}`))
       .catch((e) =>
         setErrors((oldErr) => {
           oldErr.validationError = `Failed uploading! Server responded with: ${String(

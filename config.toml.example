@@ -7,6 +7,9 @@ password = "myPassword"
 # Set the address for your server.
 address = ":8081"
 
+# Set the address for your admin interface.
+admin_address = ":8082"
+
 # Path to the grading script to run on each upload.
 grading_script = "./grade.sh"
 
