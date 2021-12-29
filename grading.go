@@ -30,8 +30,8 @@ type Result struct {
 }
 
 // Run the grading script for a single Job.
-func gradingScript(db *sql.DB, job Job, results chan<- Result, occupied <-chan bool) error {
-	defer func() { <-occupied }()
+func gradingScript(db *sql.DB, job Job, results chan<- Result, jobQueue <-chan bool) error {
+	defer func() { <-jobQueue }()
 	zr, err := gzip.NewReader(job.file)
 	if err != nil {
 		return err
@@ -59,11 +59,25 @@ func gradingScript(db *sql.DB, job Job, results chan<- Result, occupied <-chan b
 		}
 	}
 
-	output, err := exec.Command(config.GradingScript, dir).Output()
+	// Execute our grading script and parse the output.
+	cmd := exec.Command(config.GradingScript, dir)
+	output, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
-	fmt.Print(string(output))
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	parsed, err := parseOutput(output)
+	if err != nil {
+		return err
+	}
+	for _, result := range parsed {
+		results <- result
+	}
+	if err := cmd.Wait(); err != nil {
+		return err
+	}
 	return nil
 }
 

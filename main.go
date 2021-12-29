@@ -11,10 +11,8 @@ package main
 import (
 	"database/sql"
 	"flag"
-	"net/http"
 
 	"github.com/BurntSushi/toml"
-	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -27,6 +25,7 @@ var config Config
 
 // See config.toml.example for definitions of this struct's fields.
 type Config struct {
+	Password           string `toml:"password"`
 	GradingScript      string `toml:"grading_script"`
 	Address            string `toml:"address"`
 	BodyLimit          string `toml:"body_limit"`
@@ -59,6 +58,7 @@ func main() {
 	}
 
 	e.HideBanner = true
+	e.HidePort = true
 	e.Logger.SetLevel(log.DEBUG)
 	e.Use(middleware.Logger())
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(rate.Limit(config.RateLimit))))
@@ -106,21 +106,6 @@ func main() {
 	api.POST("/assignments/:id/submit", handleUpload)
 	api.GET("/results/:id", serveResults)
 
-	// Administrative API. Create, modify, delete users.
-	admin := e.Group("/elongatedcash")
-	admin.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(cc echo.Context) error {
-			c := cc.(*Ctx)
-			claims := c.Get("user").(*jwt.Token).Claims.(*UserClaim)
-			if !claims.Admin {
-				return c.NoContent(http.StatusUnauthorized)
-			}
-			return next(cc)
-		}
-	})
-	api.POST("/user", createUser)
-	api.DELETE("/user", deleteUser)
-
 	// Spawn our task runner
 	go func() {
 		occupied := make(chan bool, config.MaxJobs)
@@ -130,6 +115,16 @@ func main() {
 		}
 	}()
 
-	// Serve
+	// Spawn admin API
+	go func() {
+		s, err := startAdmin(e, db)
+		if err != nil {
+			e.Logger.Fatal(err)
+		}
+		e.Logger.Fatal(s.ListenAndServe())
+	}()
+	e.Logger.Debug("Started admin interface on :8082")
+
+	// Spawn server
 	e.Logger.Fatal(e.Start(config.Address))
 }

@@ -7,27 +7,50 @@ tremendous dub bossman
 ## About
 
 `bigmoney29` is an automated grading solution for small programming classes. It is
-reasonably small and easy to maintain.
-
-## TODO
-
-* Hash passwords (lol)
-* Use ICO instead of PNG for favicon (lol)
-* Alternative submission formats
+reasonably small and easy to use.
 
 ## Configuration/Setup
 
+The server is distributed as a static binary and webpacked React application. To
+start it, simply run the binary.
+
 Configure the server through `config.toml`. The [example file](config.toml.example)
-is heavily commented. All options should be set.
+is heavily commented. All options should be set. Changes to the configuration file
+are reflected on server restart.
 
-## Admin Accounts
+## Admin Interface
 
-You can issue admin accounts through the superuser created when the server is first started.
-The username and password are both "admin".
+You can run administrative operations on the server through its SSH interface.
+All operations are conducted by sending a file over SSH. Command names are
+case insensitive, and double quotes can be replaced by single quotes where
+seen. Mixing double and single quotes within a single string is undefined
+behavior (e.g., `"Student's Name"`).
 
-`bigmoney` hosts an administrative API on a port of your choosing to get final
-submissions.
-* Get final submissions
+### Add Students
+
+```sh
+echo '+student UID "Student Name" TemporaryPassword' > mystudents
+echo '+student UID2 "Other Student" TempPassword' >> mystudents
+ssh -p 8082 localhost <mystudents
+```
+
+### Remove Students
+
+```sh
+ssh -p 8082 localhost '-student UID2'
+```
+
+### Add Assignment
+
+```sh
+ssh -p 8082 localhost '+assignment "assignment name"'
+```
+
+### Modify a Student's Final Score
+
+```sh
+ssh -p 8082 localhost '+score UID2 "ASSIGNMENT NAME" newscore'
+```
 
 ## Grading Scripts
 
@@ -56,8 +79,12 @@ In exchange, your grading script must provide the following functionality:
     * Print an extra newline.
 * The final score is calculated as the weighted average of these test cases.
 
-For example, a grading script that will give 100 points to any student who submitted a
-single file and 50 points to all students regardless will look like:
+### Example
+
+Let's assume that we have one assignment in our class named "Assignment One". Let's also
+assume that we wrote a grading script for assignment one that will give 100 points to any
+student who submitted a single file and 50 points to all students regardless. This script
+takes a single argument: the directory to check.
 
 ```sh
 #!/bin/sh
@@ -72,6 +99,26 @@ else
   echo "Missing one file"
   echo "0.5 0\n"
 fi
+```
+
+Then, we can write a driver script for this:
+
+```sh
+#!/bin/sh
+case "$1" in
+  "Assignment One")
+    ./grade_assignment_one.sh $2
+    ;;
+  *)
+    echo "Called with an unknown assignment." 1>&2
+    ;;
+esac
+```
+
+Finally, we configure the server to use our driver script.
+
+```toml
+grading_script = "./driver.sh"
 ```
 
 ## License

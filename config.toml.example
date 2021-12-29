@@ -1,6 +1,9 @@
 # DBSN.
 db_path = "file:test.db?cache=shared&mode=memory"
 
+# Password for the admin interface.
+password = "myPassword"
+
 # Set the address for your server.
 address = ":8081"
 

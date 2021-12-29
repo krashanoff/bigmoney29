@@ -1,8 +1,8 @@
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 
-import Login from './Login';
+import Login from "./Login";
 import Results from "./Results";
-import Me from './Me';
+import Me from "./Me";
 import Summary from "./Summary";
 
 const App = () => (

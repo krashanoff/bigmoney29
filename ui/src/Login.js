@@ -1,51 +1,42 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { useCookies } from 'react-cookie';
+import { useCookies } from "react-cookie";
 
 import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
 import Stack from "react-bootstrap/Stack";
 
+import api from "./api";
+
 const Login = () => {
   const navigate = useNavigate();
   const [cookies, setCookies] = useCookies(["jwt"]);
   const [error, setError] = useState("");
 
-  if (cookies.jwt)
-    navigate("/me");
+  if (cookies.jwt) navigate("/me");
 
   const submit = (e) => {
     e.preventDefault();
-    fetch("http://localhost:8081/cash/login", {
-      method: "post",
-      mode: "cors",
-      body: new FormData(e.target),
-    })
-      .then((r) => {
-        if (r.status >= 200 && r.status < 300) return r.json();
-        throw r.status;
-      })
-      .then((resp) => {
-        setCookies("jwt", resp.token, "/");
+    api.login(
+      e,
+      (token) => {
+        setCookies("jwt", token, "/");
         navigate("/me");
-      })
-      .catch((e) =>
+      },
+      (e) =>
         setError(
-          `Failed uploading! Server responded with: ${String(
-            e
-          ).replace("TypeError: ", "")}`
+          `Failed uploading! Server responded with: ${String(e).replace(
+            "TypeError: ",
+            ""
+          )}`
         )
-      );
+    );
   };
 
   return (
     <Stack direction="vertical" gap={3}>
-      {error && (
-        <Alert variant={"danger"}>
-          Failed to login: {error}
-        </Alert>
-      )}
+      {error && <Alert variant={"danger"}>Failed to login: {error}</Alert>}
       <h1>Your class name</h1>
       <p>Log in to the [YOUR CLASS] grading system.</p>
       <Form onSubmit={submit}>

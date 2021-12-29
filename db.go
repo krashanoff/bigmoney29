@@ -1,23 +1,26 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/blockloop/scan"
 	"github.com/golang-jwt/jwt"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 var TABLEQUERIES = []string{
-	`CREATE TABLE User (
+	`CREATE TABLE IF NOT EXISTS User (
 		username VARCHAR(255) UNIQUE NOT NULL,
 		password VARCHAR(255) NOT NULL,
 		admin BOOL NOT NULL,
 		deleted TIMESTAMP,
 		PRIMARY KEY (username)
 	)`,
-	`CREATE TABLE Assignment (
+	`CREATE TABLE IF NOT EXISTS Assignment (
 		-- Name of the assignment (to be used in submissions)
 		name VARCHAR(255) UNIQUE NOT NULL,
 
@@ -25,7 +28,7 @@ var TABLEQUERIES = []string{
 		points DOUBLE(5, 2),
 		PRIMARY KEY (name)
 	)`,
-	`CREATE TABLE Submission (
+	`CREATE TABLE IF NOT EXISTS Submission (
 		-- Unique submission ID
 		id CHAR(10),
 		
@@ -93,8 +96,8 @@ func validateLogin(c *Ctx, username, password string) (*UserClaim, error) {
 }
 
 // Add a user to the database.
-func addUser(c *Ctx, admin bool, uid, name, password string) error {
-	tx, err := c.db.BeginTx(c.Request().Context(), &sql.TxOptions{
+func addUser(ctx context.Context, db *sql.DB, admin bool, uid, name, password string) error {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{
 		ReadOnly: false,
 	})
 	if err != nil {
@@ -102,7 +105,7 @@ func addUser(c *Ctx, admin bool, uid, name, password string) error {
 	}
 	defer tx.Rollback()
 
-	if _, err = tx.Exec("INSERT INTO User (?, ?, ?, ?)", admin, uid, name, password); err != nil {
+	if _, err = tx.Exec("INSERT INTO User (username, password, admin) VALUES (?, ?, ?)", uid, name, admin); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
