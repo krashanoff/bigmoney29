@@ -1,5 +1,5 @@
-# Path to use for the DB.
-db_path = "./example.db"
+# DBSN.
+db_path = "file:test.db?cache=shared&mode=memory"
 
 # Set the address for your server.
 address = ":8081"

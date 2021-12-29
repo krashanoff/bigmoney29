@@ -11,10 +11,9 @@ reasonably small and easy to maintain.
 
 ## TODO
 
-* User association
-* Use ICO instead of PNG for favicon
+* Hash passwords (lol)
+* Use ICO instead of PNG for favicon (lol)
 * Alternative submission formats
-* Grade distributions + data analysis views
 
 ## Configuration/Setup
 
@@ -49,9 +48,12 @@ In exchange, your grading script must provide the following functionality:
 * A grading script must handle the following option `--summary`.
   * Output each grading scheme.
 * A grading script must, for each test case:
+  * Print the name of the test case.
   * Print supplementary help messages to stderr.
-  * Print the weight for the test case and the program's score for the test case as
-    a 64-bit floating point number.
+  * Terminate the test case by performing the following:
+    * Print the weight for the test case and the program's score for the test case as
+      a 64-bit floating point number.
+    * Print an extra newline.
 * The final score is calculated as the weighted average of these test cases.
 
 For example, a grading script that will give 100 points to any student who submitted a
@@ -60,50 +62,16 @@ single file and 50 points to all students regardless will look like:
 ```sh
 #!/bin/sh
 cd $1
-echo "0.5 1"
-if [ "$(ls -a | wc -l)" == "4" ] then
-  echo "Single file present" 1>&2
-  echo "0.5 1"
+echo "Submitted"
+echo "0.5 1\n"
+
+echo "Contains one file"
+if [ "$(ls -a | wc -l)" == "4" ]; then
+  echo "0.5 1\n"
 else
-  echo "Missing one file" 1>&2
-  echo "0.5 0"
+  echo "Missing one file"
+  echo "0.5 0\n"
 fi
-```
-
-A grading program that performs the same operation might look like:
-
-```go
-package main
-
-import (
-  "flag"
-  "fmt"
-  "io/ioutil"
-  "os"
-)
-
-func main() {
-  flag.Parse()
-  assignmentName, chDir := flag.Arg(0), flag.Arg(1)
-  if assignmentName == "" || chDir == "" {
-    fmt.Println("1 0")
-    return
-  }
-
-  files, err := ioutil.ReadDir(chDir)
-  if err != nil {
-    fmt.Fprintln(os.Stderr, "Failed to read the directory for some reason. Email your professor.")
-    fmt.Println("1 0")
-  }
-  fmt.Println("0.5 1")
-  if len(files) == 1 {
-    fmt.Fprintln(os.Stderr, "Single file present")
-    fmt.Println("0.5 1")
-  } else {
-    fmt.Fprintln(os.Stderr, "Missing one file")
-    fmt.Println("0.5 0")
-  }
-}
 ```
 
 ## License

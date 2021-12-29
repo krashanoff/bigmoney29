@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useCookies } from 'react-cookie';
+import { useNavigate } from 'react-router-dom';
 
 import Alert from 'react-bootstrap/Alert';
 import Placeholder from 'react-bootstrap/Placeholder';
@@ -12,7 +13,6 @@ import Stack from 'react-bootstrap/Stack';
 import ProgressBar from 'react-bootstrap/ProgressBar';
 import Spinner from 'react-bootstrap/Spinner';
 import Button from 'react-bootstrap/Button';
-import { useNavigate } from 'react-router-dom';
 
 const Me = () => {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ const Me = () => {
 
   // Get user overview.
   useEffect(() => {
-    fetch("http://localhost:8081/cash/assignments", {
+    fetch("http://localhost:8081/largecurrency/assignments", {
       method: "get",
       headers: {
         "Authorization": `Bearer: ${cookies.jwt}`,
