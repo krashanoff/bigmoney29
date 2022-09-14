@@ -40,7 +40,17 @@ var TABLEQUERIES = []string{
 
 		-- Total points earned in this submission
 		points_earned DOUBLE(5, 2),
-		PRIMARY KEY (id)
+		
+		PRIMARY KEY (id),
+		FOREIGN KEY (owner) REFERENCES User (username)
+	)`,
+	`CREATE TABLE IF NOT EXISTS CaseResult (
+		case_id CHAR(10) NOT NULL,
+		submission_id CHAR(10) NOT NULL,
+		points_earned DOUBLE(5, 2),
+
+		PRIMARY KEY (case_id, submission_id),
+		FOREIGN KEY (submission_id) REFERENCES Submission (id)
 	)`,
 }
 
@@ -166,34 +176,22 @@ func getAssignments(c *Ctx) ([]Assignment, error) {
 }
 
 func addAssignment(ctx context.Context, db *sql.DB, name string, totalPoints float64) error {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{
-		ReadOnly: true,
-	})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec("INSERT INTO Assignment (name, points) VALUES (?, ?)", name, totalPoints); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	if _, err := db.ExecContext(ctx, "INSERT INTO Assignment (name, points) VALUES (?, ?)", name, totalPoints); err != nil {
 		return err
 	}
 	return nil
 }
 
 func removeAssignment(ctx context.Context, db *sql.DB, name string) error {
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{
-		ReadOnly: true,
-	})
-	if err != nil {
+	if _, err := db.ExecContext(ctx, "DELETE FROM Assignment WHERE name = '?'", name); err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if _, err := tx.Exec("DELETE FROM Assignment WHERE name = '?'", name); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	return nil
+}
+
+// TODO
+func addScore(ctx context.Context, db *sql.DB, name string) error {
+	if _, err := db.ExecContext(ctx, "INSERT INTO Submission (id, assignment, owner, points_earned) VALUES (TODO)", name); err != nil {
 		return err
 	}
 	return nil

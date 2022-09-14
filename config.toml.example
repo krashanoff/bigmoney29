@@ -1,3 +1,13 @@
+# TLS certificate and private key paths, if desired. These are totally
+# optional! Another just-as-great solution for security is proxying this
+# behind an Nginx instance.
+cert_path = "/path/to/your/website.pem"
+key_path = "/path/to/your/key.pem"
+
+# Path to the SSH keypair to use.
+private_key = "/path/to/.ssh/id_rsa"
+public_key = "/path/to/.ssh/id_rsa.pub"
+
 # DBSN.
 db_path = "file:test.db?cache=shared&mode=memory"
 

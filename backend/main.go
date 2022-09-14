@@ -35,6 +35,10 @@ type Config struct {
 	MaxJobs            uint   `toml:"max_jobs"`
 	RateLimit          uint   `toml:"rate_limit"`
 	SigningKey         string `toml:"signing_key"`
+	CertPath           string `toml:"cert_path"`
+	KeyPath            string `toml:"key_path"`
+	PublicKeyPath      string `toml:"public_key"`
+	PrivateKeyPath     string `toml:"private_key"`
 }
 
 func init() {
@@ -92,9 +96,7 @@ func main() {
 	})
 
 	// Serve our frontend files for any non-API GET request.
-	e.GET("*", func(c echo.Context) error {
-		return c.File("ui/build/index.html")
-	})
+	e.Static("", "ui/build")
 	e.POST("/login", loginUser)
 
 	// Userland API. Read assignments, grades, submit your work.
@@ -126,6 +128,12 @@ func main() {
 	}()
 	e.Logger.Debug("Started admin interface on :8082")
 
-	// Spawn server
-	e.Logger.Fatal(e.Start(config.Address))
+	// Spawn server, using HTTPS if a certificate chain was provided.
+	if config.CertPath != "" && config.KeyPath != "" {
+		e.Logger.Infof("Listening for HTTPS on %s", config.Address)
+		e.Logger.Fatal(e.StartTLS(config.Address, config.CertPath, config.KeyPath))
+	} else {
+		e.Logger.Infof("Listening for HTTP on %s", config.Address)
+		e.Logger.Fatal(e.Start(config.Address))
+	}
 }
