@@ -1,5 +1,5 @@
 /**
- * Data-rich summary of your scores and stuff.
+ * Data-rich summary of your scores and stuff for a given assignment.
  */
 
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ import Stack from "react-bootstrap/Stack";
 import Button from "react-bootstrap/Button";
 import Alert from "react-bootstrap/Alert";
 
-const Summary = () => {
+const Assignment = () => {
   const navigate = useNavigate();
   const { 0: cookies } = useCookies(["jwt"]);
 
@@ -33,4 +33,4 @@ const Summary = () => {
   );
 };
 
-export default Summary;
+export default Assignment;

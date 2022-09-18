@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Login from "./Login";
 import Results from "./Results";
 import Me from "./Me";
-import Summary from "./Summary";
+import Assignment from "./Assignment";
 
 const App = () => (
   <Router>
@@ -11,7 +11,7 @@ const App = () => (
       <Route path="/">
         <Route index element={<Login />} />
         <Route path="me" element={<Me />} />
-        <Route path="summary/:id" element={<Summary />} />
+        <Route path="assignment/:id" element={<Assignment />} />
         <Route path="results/:id" element={<Results />} />
       </Route>
     </Routes>

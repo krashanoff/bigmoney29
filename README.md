@@ -14,7 +14,7 @@ reasonably small and easy to use.
 The server is distributed as a static binary and webpacked React application. To
 start it, simply run the binary.
 
-Configure the server through `config.toml`. The [example file](config.toml.example)
+Configure the server through `config.toml`. The [example file](./examples/config.toml)
 is heavily commented. All options should be set. Changes to the configuration file
 are reflected on server restart.
 
@@ -22,15 +22,13 @@ are reflected on server restart.
 
 You can run administrative operations on the server through its SSH interface.
 All operations are conducted by sending a file over SSH. Command names are
-case insensitive, and double quotes can be replaced by single quotes where
-seen. Mixing double and single quotes within a single string is undefined
-behavior (e.g., `"Student's Name"`).
+case insensitive, and operands must be space-delimited.
 
 ### Add Students
 
 ```sh
-echo '+student UID "Student Name" TemporaryPassword' > mystudents
-echo '+student UID2 "Other Student" TempPassword' >> mystudents
+echo '+student UID Student_Name TemporaryPassword' > mystudents
+echo '+student UID2 Other_Student TempPassword' >> mystudents
 ssh -p 8082 localhost <mystudents
 ```
 

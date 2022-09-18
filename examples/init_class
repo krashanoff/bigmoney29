@@ -1,0 +1,3 @@
+# This is an example of batch-entry of admin commands to the database.
+
++student user Test_Student pass

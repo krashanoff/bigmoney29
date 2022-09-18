@@ -75,11 +75,14 @@ func validateLogin(c *Ctx, username, password string) (*UserClaim, error) {
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.QueryContext(c.Request().Context(), "SELECT ( password, admin ) FROM User WHERE ( username = ? )", username)
+	c.Logger().Infof("Username: %s Password: %s", username, password)
+
+	rows, err := tx.QueryContext(c.Request().Context(), "SELECT password, admin FROM User WHERE ( username = ? )", username)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	rows.Next()
 
 	var (
 		actualPassword string
@@ -150,25 +153,17 @@ type Assignment struct {
 
 // Get assignment information for the class.
 func getAssignments(c *Ctx) ([]Assignment, error) {
-	tx, err := c.db.BeginTx(c.Request().Context(), &sql.TxOptions{
-		ReadOnly: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	results, err := tx.Query("SELECT * FROM Assignment")
+	results, err := c.db.Query("SELECT * FROM Assignment")
 	if err != nil {
 		return nil, err
 	}
 	defer results.Close()
 
-	var assignments []Assignment
-	if err := scan.Rows(&assignments, results); err != nil {
-		return nil, err
+	assignments := []Assignment{}
+	if !results.Next() {
+		return assignments, nil
 	}
-	if err := tx.Commit(); err != nil {
+	if err := scan.Rows(&assignments, results); err != nil {
 		return nil, err
 	}
 
@@ -184,14 +179,6 @@ func addAssignment(ctx context.Context, db *sql.DB, name string, totalPoints flo
 
 func removeAssignment(ctx context.Context, db *sql.DB, name string) error {
 	if _, err := db.ExecContext(ctx, "DELETE FROM Assignment WHERE name = '?'", name); err != nil {
-		return err
-	}
-	return nil
-}
-
-// TODO
-func addScore(ctx context.Context, db *sql.DB, name string) error {
-	if _, err := db.ExecContext(ctx, "INSERT INTO Submission (id, assignment, owner, points_earned) VALUES (TODO)", name); err != nil {
 		return err
 	}
 	return nil

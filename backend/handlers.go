@@ -34,6 +34,7 @@ func loginUser(cc echo.Context) error {
 	// Validate the username and password against our database.
 	claim, err := validateLogin(c, username, password)
 	if err != nil {
+		c.Logger().Warnf("User '%s' could not login: %v", username, err)
 		return c.NoContent(http.StatusForbidden)
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
@@ -50,8 +51,10 @@ func loginUser(cc echo.Context) error {
 // Get assignments for class
 func assignmentInformation(cc echo.Context) error {
 	c := cc.(*Ctx)
+	c.Logger().Info("Checking assignments")
 	assn, err := getAssignments(c)
 	if err != nil {
+		c.Logger().Error(err)
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, assn)

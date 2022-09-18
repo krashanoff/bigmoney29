@@ -1,9 +1,10 @@
 // Utilities for the API.
 
-const USERLAND = "http://localhost:8081/largecurrency";
+const API_BASE = "http://localhost:8081";
+const USERLAND = `${API_BASE}/largecurrency`;
 
 const login = (formEvent, onSuccess, onError) =>
-  fetch(`${USERLAND}/login`, {
+  fetch(`${API_BASE}/login`, {
     method: "post",
     mode: "cors",
     body: new FormData(formEvent.target),
@@ -19,7 +20,7 @@ const getAssignments = (jwt, onSuccess, onError) =>
   fetch(`${USERLAND}/assignments`, {
     method: "get",
     headers: {
-      Authorization: `Bearer: ${jwt}`,
+      Authorization: `Bearer ${jwt}`,
     },
   })
     .then((r) => {
