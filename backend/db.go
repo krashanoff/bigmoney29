@@ -82,7 +82,9 @@ func validateLogin(c *Ctx, username, password string) (*UserClaim, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	rows.Next()
+	if !rows.Next() {
+		return nil, errors.New("incorrect credentials")
+	}
 
 	var (
 		actualPassword string

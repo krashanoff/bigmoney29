@@ -65,7 +65,7 @@ want to in these... and so can students. Exercise caution.
   have chmod `0640` by default, and be created by the user `bigmoney` is running under.
 
 In exchange, your grading script must provide the following functionality:
-* A grading script **must** have chmod `0700` for the `bigmoney` user.
+* A grading script **must** have execution permissions for the server's user.
 * A grading script must, for each test case:
   * Print the name of the test case.
   * Print supplementary help messages to stderr.
