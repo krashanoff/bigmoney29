@@ -14,39 +14,53 @@ import (
 
 var TABLEQUERIES = []string{
 	`CREATE TABLE IF NOT EXISTS User (
+		-- Username for the user
 		username VARCHAR(255) UNIQUE NOT NULL,
+
+		-- Hashed password of the user
 		password VARCHAR(255) NOT NULL,
+
+		-- Whether or not the user is an administrator
 		admin BOOL NOT NULL,
+
+		-- When the user was deleted (if at all)
 		deleted TIMESTAMP,
+
 		PRIMARY KEY (username)
 	)`,
 	`CREATE TABLE IF NOT EXISTS Assignment (
+		-- ID of the assignment in the database
+		id uuid_v4,
+
 		-- Name of the assignment (to be used in submissions)
 		name VARCHAR(255) UNIQUE NOT NULL,
 
 		-- Points possible for the assignment
 		points DOUBLE(5, 2),
-		PRIMARY KEY (name)
+
+		PRIMARY KEY (id)
 	)`,
 	`CREATE TABLE IF NOT EXISTS Submission (
 		-- Unique submission ID
-		id CHAR(10),
+		id uuid_v4,
 		
 		-- ID for assignment
-		assignment VARCHAR(50) NOT NULL,
+		assignment_id uuid_v4 NOT NULL,
 
 		-- ID of submitter
 		owner VARCHAR(255) NOT NULL,
 
-		-- Total points earned in this submission
-		points_earned DOUBLE(5, 2),
-		
 		PRIMARY KEY (id),
 		FOREIGN KEY (owner) REFERENCES User (username)
 	)`,
 	`CREATE TABLE IF NOT EXISTS CaseResult (
+		-- Since this ID is determined by the grading script, it
+		-- isn't our concern.
 		case_id CHAR(10) NOT NULL,
-		submission_id CHAR(10) NOT NULL,
+
+		submission_id uuid_v4 NOT NULL,
+
+		-- Points earned on this particular grading case.
 		points_earned DOUBLE(5, 2),
 
 		PRIMARY KEY (case_id, submission_id),
